@@ -130,11 +130,38 @@ export default function TvPlayer() {
     const onKey = (e) => {
       if (e.key === 'ArrowRight') setIdx((v) => (v + 1) % slides.length);
       if (e.key === 'ArrowLeft') setIdx((v) => (v - 1 + slides.length) % slides.length);
-      if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+      if (e.key === 'f' || e.key === 'F') containerRef.current?.requestFullscreen?.().catch(() => {});
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [slides.length]);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showChrome, setShowChrome] = useState(true);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  // hide chrome after 4s in fullscreen for true full bleed
+  useEffect(() => {
+    if (!isFullscreen) { setShowChrome(true); return; }
+    setShowChrome(true);
+    const t = setTimeout(() => setShowChrome(false), 4000);
+    const onMove = () => { setShowChrome(true); clearTimeout(t); };
+    window.addEventListener('mousemove', onMove);
+    return () => { clearTimeout(t); window.removeEventListener('mousemove', onMove); };
+  }, [isFullscreen, idx]);
+
+  async function toggleFullscreen() {
+    try {
+      if (!document.fullscreenElement) await containerRef.current?.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {}
+  }
 
   if (!slides.length) {
     return <div className="w-screen h-screen grid place-items-center text-white/60">Нет слайдов — добавь в /admin</div>;
@@ -143,23 +170,33 @@ export default function TvPlayer() {
   const current = slides[idx];
 
   return (
-    <div className="w-screen h-screen bg-black overflow-hidden relative select-none">
-      {/* top bar for setup */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2 bg-black/35 backdrop-blur text-white/80 text-xs tracking-wide">
+    <div ref={containerRef} className="w-screen h-screen bg-black overflow-hidden relative select-none">
+      {/* top bar — hides in fullscreen after 4s for full-bleed */}
+      <div className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2 bg-black/55 backdrop-blur text-white/90 text-xs tracking-wide transition-opacity duration-500 ${isFullscreen && !showChrome ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с</span>
-        <span className="opacity-60">← → листать • F фуллскрин • Открой /admin для редактирования</span>
+        <span className="flex items-center gap-2">
+          <span className="opacity-60 hidden sm:inline">← → листать • F фуллскрин</span>
+          <button onClick={toggleFullscreen} className="px-3 py-1.5 rounded-full bg-white text-black font-bold hover:bg-zinc-100">
+            {isFullscreen ? 'Выйти из фуллскрина' : '⛶ На весь экран'}
+          </button>
+        </span>
       </div>
 
-      <div className="absolute inset-0 pt-8" style={{ perspective: 1200 }}>
+      <div className={`absolute inset-0 ${isFullscreen && !showChrome ? 'pt-0' : 'pt-8'} transition-all`} style={{ perspective: 1200 }}>
         <AnimatePresence mode="wait" initial={false}>
           <Slide key={current.id + idx} slide={current} />
         </AnimatePresence>
       </div>
 
+      {/* support: tap to fullscreen on smart TV without keyboard */}
+      {!isFullscreen && (
+        <button onClick={toggleFullscreen} className="absolute inset-0 z-10 cursor-pointer opacity-0" aria-label="tap for fullscreen" />
+      )}
+
       {/* progress dots */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2 transition-opacity ${isFullscreen && !showChrome ? 'opacity-0' : 'opacity-100'}`}>
         {slides.map((_, i) => (
-          <div key={i} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />
+          <button key={i} onClick={() => setIdx(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />
         ))}
       </div>
 

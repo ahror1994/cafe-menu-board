@@ -25,9 +25,11 @@ function Home() {
   );
 }
 
+const basename = import.meta.env.PROD ? '/cafe-menu-board' : '';
+
 export default function App() {
   return (
-    <BrowserRouter basename="/cafe-menu-board">
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/admin" element={<Admin />} />
