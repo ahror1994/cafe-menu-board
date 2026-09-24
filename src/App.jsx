@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import Admin from './pages/Admin';
 import TvPlayer from './pages/TvPlayer';
 
@@ -25,17 +25,15 @@ function Home() {
   );
 }
 
-const basename = import.meta.env.PROD ? '/cafe-menu-board' : '';
-
 export default function App() {
   return (
-    <BrowserRouter basename={basename}>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/tv/:id" element={<TvPlayer />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
