@@ -16,6 +16,9 @@ export default function GlassPill({ item, index = 0, interactive = false, select
       transition={{ delay: 0.18 + index * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       onClick={interactive ? onSelect : undefined}
       style={{
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
         background: bg,
         borderColor: border,
         backdropFilter: `blur(${blur}px)`,

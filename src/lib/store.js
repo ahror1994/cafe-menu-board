@@ -1,5 +1,5 @@
 // Simple localStorage store - easily swappable to Supabase/Firebase later
-const KEY = 'cafe-menu-v1';
+const KEY = 'cafe-menu-v2';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -19,16 +19,18 @@ function defaultStyle() {
 
 function normalizeItem(raw, i) {
   const cols = [46, 30, 32];
+  const rawW = typeof raw.w === 'number' ? raw.w : raw.w ? Number(raw.w) : cols[i % cols.length];
+  // clamp width to prevent old huge values from breaking layout
+  const w = Math.max(12, Math.min(88, rawW));
   return {
     id: raw.id || uid(),
     title: raw.title || raw.name || 'Блюдо',
     desc: raw.desc || raw.subtitle || '',
     weight: raw.weight || raw.gram || raw.grams || raw.gramm || '',
     price: raw.price || '0 ₽',
-    // % coords, Figma-like free placement
-    x: typeof raw.x === 'number' ? raw.x : (i === 0 ? 6 : i === 1 ? 52 : 10 + i * 30) % 60,
+    x: typeof raw.x === 'number' ? Math.max(0, Math.min(100 - w, raw.x)) : (i === 0 ? 6 : i === 1 ? 52 : 10 + i * 30) % 60,
     y: typeof raw.y === 'number' ? raw.y : 68,
-    w: typeof raw.w === 'number' ? raw.w : raw.w ? Number(raw.w) : cols[i % cols.length],
+    w,
     style: { ...defaultStyle(), ...(raw.style || {}) },
   };
 }

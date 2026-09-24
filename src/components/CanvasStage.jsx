@@ -20,8 +20,9 @@ export default function CanvasStage({ slide, selectedId, onSelect, onMoveItem, o
     const sx = pct.x - item.x, sy = pct.y - item.y;
     const move = (ev) => {
       const p = getPct(ev.clientX, ev.clientY);
+      // clamp strictly to canvas, no auto-resize
       const nx = clamp(p.x - sx, 0, 100 - (item.w || 30));
-      const ny = clamp(p.y - sy, 0, 100 - 12);
+      const ny = clamp(p.y - sy, 0, 100 - 8);
       onMoveItem(item.id, nx, ny);
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setDrag(null); };
