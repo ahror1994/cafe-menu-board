@@ -1,5 +1,6 @@
 // Simple localStorage store - easily swappable to Supabase/Firebase later
-const KEY = 'cafe-menu-v2';
+const KEY = 'cafe-menu-v3';
+const OLD_KEYS = ['cafe-menu-v1', 'cafe-menu-v2'];
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -129,12 +130,27 @@ const DEFAULT = normalizeStore(RAW_DEFAULT);
 
 export function loadStore() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return structuredClone(DEFAULT);
+    let raw = localStorage.getItem(KEY);
+    // one-time migration: if v3 empty but old key exists, migrate
+    if (!raw) {
+      for (const k of OLD_KEYS) {
+        const old = localStorage.getItem(k);
+        if (old) { raw = old; break; }
+      }
+      if (!raw) return structuredClone(DEFAULT);
+      const parsed = JSON.parse(raw);
+      const migrated = normalizeStore(parsed);
+      // persist migrated immediately
+      try { localStorage.setItem(KEY, JSON.stringify(migrated)); } catch {}
+      return migrated;
+    }
     const parsed = JSON.parse(raw);
-    // migrate old shape if needed
     return normalizeStore(parsed);
   } catch { return structuredClone(DEFAULT); }
+}
+
+export function wipeOldKeys() {
+  for (const k of OLD_KEYS) try { localStorage.removeItem(k); localStorage.removeItem(k + '_ts'); } catch {}
 }
 
 export function saveStore(data) {
@@ -161,6 +177,7 @@ export const TRANSITIONS = [
   { id: 'blinds', label: 'Жалюзи' },
   { id: 'cube', label: '3D Cube' },
   { id: 'pixel', label: 'Pixelate' },
+  { id: 'displacement', label: 'Displacement (GL Warp)' },
 ];
 
 export const DEFAULT_STYLE = defaultStyle();

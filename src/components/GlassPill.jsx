@@ -31,29 +31,29 @@ export default function GlassPill({ item, index = 0, interactive = false, select
       className={`px-5 py-4 flex flex-col gap-1.5 select-none ${selected ? 'ring-2 ring-sky-400 ring-offset-2 ring-offset-black/20' : ''} ${interactive ? 'cursor-grab active:cursor-grabbing hover:shadow-[0_12px_40px_rgba(0,0,0,0.24)]' : ''}`}
     >
       {/* 1. Заголовок */}
-      <div style={{ color: s.textColor || '#18181b' }} className="text-[18px] font-bold leading-tight tracking-tight">
+      <div style={{ color: s.textColor || '#18181b', fontSize: '1em' }} className="font-bold leading-tight tracking-tight">
         {item.title || item.name}
       </div>
 
       {/* 2. Описание — если есть */}
       {item.desc ? (
-        <div style={{ color: s.textColor || '#18181b', opacity: 0.68 }} className="text-[12px] font-medium leading-snug">
+        <div style={{ color: s.textColor || '#18181b', opacity: 0.68, fontSize: '0.62em' }} className="font-medium leading-snug">
           {item.desc}
         </div>
       ) : null}
 
       {/* 3. Граммовка — если указана */}
       {item.weight ? (
-        <div style={{ color: s.textColor || '#18181b', opacity: 0.55 }} className="text-[11px] font-semibold tracking-wide">
+        <div style={{ color: s.textColor || '#18181b', opacity: 0.55, fontSize: '0.58em' }} className="font-semibold tracking-wide">
           {item.weight}
         </div>
       ) : null}
 
-      {/* 4. Цена — всегда вертикально последней, на отдельной строке */}
+      {/* 4. Цена — всегда вертикально последней */}
       <div className="pt-1">
         <span
-          style={{ background: s.priceBg || '#18181b', color: s.priceColor || '#ffffff', borderRadius: Math.max(10, (radius - 8)) }}
-          className="inline-flex text-[15px] font-extrabold px-3.5 py-1.5 leading-none"
+          style={{ background: s.priceBg || '#18181b', color: s.priceColor || '#ffffff', borderRadius: Math.max(10, (radius - 8)), fontSize: '0.82em' }}
+          className="inline-flex font-extrabold px-3 py-1.5 leading-none"
         >
           {item.price}
         </span>

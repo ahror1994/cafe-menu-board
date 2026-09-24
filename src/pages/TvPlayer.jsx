@@ -11,31 +11,41 @@ const variants = {
   blinds: { initial: { clipPath: 'inset(0 100% 0 0)', opacity: 0 }, animate: { clipPath: 'inset(0 0% 0 0)', opacity: 1 }, exit: { clipPath: 'inset(0 0 0 100%)', opacity: 0 } },
   cube: { initial: { rotateY: 90, opacity: 0, transformOrigin: 'right center' }, animate: { rotateY: 0, opacity: 1 }, exit: { rotateY: -90, opacity: 0, transformOrigin: 'left center' } },
   pixel: { initial: { opacity: 0, filter: 'blur(10px) contrast(1.5)' }, animate: { opacity: 1, filter: 'blur(0px) contrast(1)' }, exit: { opacity: 0, filter: 'blur(12px)' } },
+  displacement: { initial: { opacity: 0, filter: 'blur(8px) contrast(1.2)', scale: 1.03 }, animate: { opacity: 1, filter: 'blur(0px) contrast(1)', scale: 1 }, exit: { opacity: 0, filter: 'blur(10px)', scale: 0.98 } },
 };
 
 function Slide({ slide }) {
   const isVideo = slide.type === 'video';
+  const isDisp = slide.transition === 'displacement';
   return (
     <motion.div
       key={slide.id}
       variants={variants[slide.transition] || variants.fade}
       initial="initial" animate="animate" exit="exit"
-      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: isDisp ? 1.0 : 0.9, ease: [0.22, 1, 0.36, 1] }}
       className="absolute inset-0 overflow-hidden bg-black"
       style={{ perspective: 1200 }}
     >
       {isVideo ? (
         <video src={slide.bg} autoPlay muted loop playsInline preload="auto" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
-        <motion.img src={slide.bg} alt="" className="absolute inset-0 w-full h-full object-cover" initial={{ scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: slide.duration + 1, ease: 'linear' }} />
+        <motion.img
+          src={slide.bg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          initial={{ scale: isDisp ? 1.06 : 1.08 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: slide.duration + 1, ease: 'linear' }}
+        />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10 pointer-events-none" />
-      {/* free-positioned pills, 1:1 with admin canvas — NO minWidth stretching */}
+      {/* free-positioned pills, 1:1 with admin canvas — NO minWidth stretching; font scales with container */}
       {slide.items?.map((item, idx) => (
-        <div key={item.id} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%` }}>
+        <div key={item.id} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, fontSize: 'clamp(10px, 1.05vw, 22px)' }}>
           <GlassPill item={item} index={idx} />
         </div>
       ))}
+      {isDisp && <div className="absolute inset-0 pointer-events-none opacity-20 mix-blend-screen" style={{ background: `repeating-linear-gradient(90deg, transparent 0 2px, rgba(255,255,255,0.06) 2px 3px)` }} />}
     </motion.div>
   );
 }

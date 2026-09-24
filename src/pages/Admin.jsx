@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { loadStore, saveStore, resetStore, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
+import { loadStore, saveStore, resetStore, wipeOldKeys, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
 import CanvasStage from '../components/CanvasStage';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -11,7 +11,7 @@ export default function Admin() {
   const [activeSlideId, setActiveSlideId] = useState(store.screens[0]?.slides[0]?.id);
   const [selectedId, setSelectedId] = useState(store.screens[0]?.slides[0]?.items[0]?.id || null);
 
-  useEffect(() => { saveStore(store); }, [store]);
+  useEffect(() => { saveStore(store); wipeOldKeys(); }, [store]);
 
   const screen = store.screens.find((s) => s.id === activeScreenId);
   const slide = screen?.slides.find((s) => s.id === activeSlideId);
@@ -55,7 +55,8 @@ export default function Admin() {
             <p className="text-xs text-zinc-400">Figma-холст: тяни плашки мышкой куда хочешь → на ТВ будет 1-в-1. Прозрачность / блюр / цвет — всё настраивается.</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { const s = resetStore(); setStore(s); setActiveScreenId(s.screens[0].id); setActiveSlideId(s.screens[0].slides[0].id); setSelectedId(s.screens[0].slides[0].items[0]?.id || null); }} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">Сбросить демо</button>
+            <button onClick={() => { if (!confirm('Сбросить всё к демо? Старые данные из браузера удалятся.')) return; try { localStorage.clear(); } catch {} const s = resetStore(); setStore(s); setActiveScreenId(s.screens[0].id); setActiveSlideId(s.screens[0].slides[0].id); setSelectedId(s.screens[0].slides[0].items[0]?.id || null); location.reload(); }} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">Сбросить демо</button>
+            <button onClick={() => { try { localStorage.clear(); } catch {} alert('Кэш очищен. Перезагружаю...'); location.reload(); }} className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold">Очистить кэш</button>
             <Link to={`/tv/${activeScreenId}`} target="_blank" className="px-4 py-2 rounded-xl bg-white text-zinc-900 font-semibold text-sm hover:bg-zinc-100">Открыть ТВ ▶</Link>
           </div>
         </div>
