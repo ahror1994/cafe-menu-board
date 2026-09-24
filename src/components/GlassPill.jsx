@@ -25,28 +25,39 @@ export default function GlassPill({ item, index = 0, interactive = false, select
         borderWidth: 1,
         borderStyle: 'solid',
       }}
-      className={`px-5 py-3.5 flex flex-col gap-1.5 cursor-default select-none ${selected ? 'ring-2 ring-sky-400 ring-offset-2 ring-offset-black/20' : ''} ${interactive ? 'cursor-grab active:cursor-grabbing hover:shadow-[0_12px_40px_rgba(0,0,0,0.24)]' : ''}`}
+      className={`px-5 py-4 flex flex-col gap-1.5 select-none ${selected ? 'ring-2 ring-sky-400 ring-offset-2 ring-offset-black/20' : ''} ${interactive ? 'cursor-grab active:cursor-grabbing hover:shadow-[0_12px_40px_rgba(0,0,0,0.24)]' : ''}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div style={{ color: s.textColor || '#18181b' }} className="text-[18px] font-bold leading-tight tracking-tight truncate">
-            {item.title || item.name}
-          </div>
-          {item.desc ? (
-            <div style={{ color: s.textColor || '#18181b', opacity: 0.7 }} className="text-[12px] font-medium leading-tight mt-1 line-clamp-2">
-              {item.desc}
-            </div>
-          ) : null}
+      {/* 1. Заголовок */}
+      <div style={{ color: s.textColor || '#18181b' }} className="text-[18px] font-bold leading-tight tracking-tight">
+        {item.title || item.name}
+      </div>
+
+      {/* 2. Описание — если есть */}
+      {item.desc ? (
+        <div style={{ color: s.textColor || '#18181b', opacity: 0.68 }} className="text-[12px] font-medium leading-snug">
+          {item.desc}
         </div>
+      ) : null}
+
+      {/* 3. Граммовка — если указана */}
+      {item.weight ? (
+        <div style={{ color: s.textColor || '#18181b', opacity: 0.55 }} className="text-[11px] font-semibold tracking-wide">
+          {item.weight}
+        </div>
+      ) : null}
+
+      {/* 4. Цена — всегда вертикально последней, на отдельной строке */}
+      <div className="pt-1">
         <span
-          style={{ background: s.priceBg || '#18181b', color: s.priceColor || '#ffffff', borderRadius: Math.max(10, (radius - 6)) }}
-          className="shrink-0 text-[15px] font-extrabold px-3.5 py-1.5 whitespace-nowrap leading-none"
+          style={{ background: s.priceBg || '#18181b', color: s.priceColor || '#ffffff', borderRadius: Math.max(10, (radius - 8)) }}
+          className="inline-flex text-[15px] font-extrabold px-3.5 py-1.5 leading-none"
         >
           {item.price}
         </span>
       </div>
-      {interactive && s.blur !== undefined && (
-        <span className="text-[10px] tracking-widest uppercase opacity-60" style={{ color: s.textColor || '#18181b' }}>
+
+      {interactive && (
+        <span className="text-[10px] tracking-widest uppercase opacity-50" style={{ color: s.textColor || '#18181b' }}>
           blur {s.blur}px • {Math.round((s.bgOpacity ?? 0.82) * 100)}%
         </span>
       )}

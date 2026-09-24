@@ -30,9 +30,9 @@ function Slide({ slide }) {
         <motion.img src={slide.bg} alt="" className="absolute inset-0 w-full h-full object-cover" initial={{ scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: slide.duration + 1, ease: 'linear' }} />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10 pointer-events-none" />
-      {/* free-positioned pills, 1:1 with admin canvas */}
+      {/* free-positioned pills, 1:1 with admin canvas — NO minWidth stretching */}
       {slide.items?.map((item, idx) => (
-        <div key={item.id} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, minWidth: 220 }}>
+        <div key={item.id} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%` }}>
           <GlassPill item={item} index={idx} />
         </div>
       ))}

@@ -187,11 +187,20 @@ export default function Admin() {
                   ) : (
                     <div className="flex flex-col gap-4">
                       <div className="rounded-xl bg-zinc-800 border border-zinc-700 p-3 flex flex-col gap-3">
-                        <input value={selected.title} onChange={(e) => patchItem(selected.id, { title: e.target.value })} placeholder="Заголовок" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 outline-none font-semibold" />
-                        <input value={selected.desc || ''} onChange={(e) => patchItem(selected.id, { desc: e.target.value })} placeholder="Описание (необязательно)" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 outline-none text-sm" />
+                        <label className="flex flex-col gap-1 text-xs text-zinc-400">Заголовок
+                          <input value={selected.title} onChange={(e) => patchItem(selected.id, { title: e.target.value })} placeholder="Сочный Бургер" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 outline-none font-semibold text-white" />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-zinc-400">Описание (необязательно)
+                          <input value={selected.desc || ''} onChange={(e) => patchItem(selected.id, { desc: e.target.value })} placeholder="Говядина, сыр чеддер, свежие овощи" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 outline-none text-sm" />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-zinc-400">Граммовка (необязательно) — показываю только если заполнена
+                          <input value={selected.weight || ''} onChange={(e) => patchItem(selected.id, { weight: e.target.value })} placeholder="250 г / 0,5 л / 150/30 г" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 outline-none text-sm font-mono" />
+                        </label>
                         <div className="grid grid-cols-2 gap-2">
-                          <input value={selected.price} onChange={(e) => patchItem(selected.id, { price: e.target.value })} placeholder="Цена" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700" />
-                          <button onClick={() => { if (!confirm('Удалить плашку?')) return; updateStore((d) => { const sl = d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId); sl.items = sl.items.filter((x) => x.id !== selected.id); }); setSelectedId(slide.items.find((x) => x.id !== selected.id)?.id || null); }} className="px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold">Удалить</button>
+                          <label className="flex flex-col gap-1 text-xs text-zinc-400">Цена
+                            <input value={selected.price} onChange={(e) => patchItem(selected.id, { price: e.target.value })} placeholder="450 ₽" className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 font-bold" />
+                          </label>
+                          <button onClick={() => { if (!confirm('Удалить плашку?')) return; updateStore((d) => { const sl = d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId); sl.items = sl.items.filter((x) => x.id !== selected.id); }); setSelectedId(slide.items.find((x) => x.id !== selected.id)?.id || null); }} className="self-end px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold">Удалить</button>
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <label className="flex flex-col gap-1">X

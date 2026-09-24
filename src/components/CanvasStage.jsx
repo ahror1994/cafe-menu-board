@@ -51,7 +51,7 @@ export default function CanvasStage({ slide, selectedId, onSelect, onMoveItem, o
       {slide.type === 'video' ? <video src={slide.bg} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <img src={slide.bg} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" draggable={false} />}
       <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
       {slide.items.map((it, idx) => (
-        <div key={it.id} onPointerDown={(e) => onPointerDown(e, it)} onClick={(e) => { e.stopPropagation(); onSelect(it.id); }} style={{ position: 'absolute', left: `${it.x}%`, top: `${it.y}%`, width: `${it.w}%`, minWidth: 160, touchAction: 'none' }} className="group">
+        <div key={it.id} onPointerDown={(e) => onPointerDown(e, it)} onClick={(e) => { e.stopPropagation(); onSelect(it.id); }} style={{ position: 'absolute', left: `${it.x}%`, top: `${it.y}%`, width: `${it.w}%`, touchAction: 'none' }} className="group">
           <div className={`${selectedId === it.id ? 'ring-2 ring-sky-400 ring-offset-1 ring-offset-black/40 rounded-[14px]' : ''}`}>
             <GlassPill item={it} index={idx} interactive selected={selectedId === it.id} onSelect={() => onSelect(it.id)} />
           </div>
