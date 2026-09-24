@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadStore, saveStore, resetStore, wipeOldKeys, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
 import CanvasStage from '../components/CanvasStage';
@@ -44,6 +44,64 @@ export default function Admin() {
       const it = d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).items.find((x) => x.id === itemId);
       it.style = { ...it.style, ...patch };
     });
+  }
+
+  // style clipboard
+  const [copiedStyle, setCopiedStyle] = useState(null);
+  function copyStyleFromSelected() {
+    if (!selected) return;
+    setCopiedStyle(structuredClone(selected.style));
+  }
+  function pasteStyleToSelected() {
+    if (!selected || !copiedStyle) return;
+    patchStyle(selected.id, structuredClone(copiedStyle));
+  }
+  function applyStyleToAllOnSlide() {
+    if (!selected || !slide) return;
+    const style = structuredClone(selected.style);
+    updateStore((d) => {
+      const sl = d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId);
+      sl.items.forEach((it) => { it.style = structuredClone(style); });
+    });
+  }
+  function applyStyleToAllEverywhere() {
+    if (!selected) return;
+    const style = structuredClone(selected.style);
+    updateStore((d) => {
+      d.screens.forEach((sc) => sc.slides.forEach((sl) => sl.items.forEach((it) => { it.style = structuredClone(style); })));
+    });
+  }
+
+  // image upload: compress to 1920w JPEG dataURL and put into slide.bg
+  const fileInputRef = React.useRef(null);
+  function fileToDataUrl(file, maxW = 1920, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxW) { h = Math.round((h * maxW) / w); w = maxW; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        try { resolve(c.toDataURL('image/jpeg', quality)); } catch (e) { reject(e); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не удалось прочитать картинку')); };
+      img.src = url;
+    });
+  }
+  async function onPickFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { alert('Выбери картинку JPG/PNG/WebP'); e.target.value = ''; return; }
+    if (f.size > 12 * 1024 * 1024) { alert('Файл слишком большой (>12MB). Сожми фото.'); e.target.value = ''; return; }
+    try {
+      const dataUrl = await fileToDataUrl(f, 1920, 0.82);
+      // check localStorage size: dataURL ~ 300-600KB for 1920 JPG 0.82
+      updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = dataUrl; });
+    } catch (err) { alert(err.message || String(err)); }
+    finally { e.target.value = ''; }
   }
 
   return (
@@ -162,9 +220,14 @@ export default function Admin() {
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs tracking-widest uppercase text-zinc-400">{slide.type === 'video' ? 'Ссылка на MP4' : 'Ссылка на фото'}</span>
-                    <input value={slide.bg} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = e.target.value; })} placeholder="https://... или /my-photo.jpg" className="px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 outline-none" />
-                    <span className="text-[11px] text-zinc-500">Кинь файл в <code className="bg-zinc-800 px-1 py-0.5 rounded">public/</code> и укажи <code className="bg-zinc-800 px-1 py-0.5 rounded">/file.jpg</code>. Видео MP4 H.264 1920×1080.</span>
+                    <span className="text-xs tracking-widest uppercase text-zinc-400">{slide.type === 'video' ? 'Ссылка на MP4' : 'Фон листа — загрузи свою картинку'}</span>
+                    <div className="flex gap-2">
+                      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onPickFile} className="hidden" />
+                      <button onClick={() => fileInputRef.current?.click()} className="shrink-0 px-4 py-2.5 rounded-xl bg-white text-zinc-900 font-bold text-sm hover:bg-zinc-100">📤 Загрузить фото</button>
+                      <input value={slide.bg?.startsWith('data:') ? '— загружено из файла (сохранится на сайте) —' : slide.bg} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = e.target.value; })} placeholder="https://... или /my-photo.jpg или Загрузить фото" className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 outline-none text-xs" />
+                    </div>
+                    <span className="text-[11px] text-zinc-500">Загрузи JPG/PNG/WebP — сожмётся до 1920px и сохранится прямо на сайте (без внешних ссылок). Или вставь ссылку / путь <code className="bg-zinc-800 px-1 py-0.5 rounded">/file.jpg</code>. Видео MP4 H.264 1920×1080.</span>
+                    {slide.bg?.startsWith('data:') && <button onClick={() => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=1920'; })} className="self-start text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700">Убрать загруженное → вернуть демо</button>}
                   </label>
                 </section>
 
@@ -221,7 +284,18 @@ export default function Admin() {
 
                       {/* Figma-like style panel */}
                       <div className="rounded-xl bg-zinc-800 border border-zinc-700 p-3 flex flex-col gap-3">
-                        <div className="text-xs font-semibold tracking-widest uppercase text-zinc-400">Стиль как в Figma</div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold tracking-widest uppercase text-zinc-400">Стиль как в Figma</span>
+                          <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${copiedStyle ? 'bg-emerald-600 text-white' : 'bg-zinc-700 text-zinc-400'}`}>{copiedStyle ? '✓ стиль скопирован' : '—'}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={copyStyleFromSelected} className="px-3 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-xs font-bold border border-zinc-600">⎘ Копировать стиль</button>
+                          <button onClick={pasteStyleToSelected} disabled={!copiedStyle} className={`px-3 py-2 rounded-xl text-xs font-bold border ${copiedStyle ? 'bg-white text-zinc-900 border-white hover:bg-zinc-100' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>⎗ Вставить стиль</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={applyStyleToAllOnSlide} className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold">Применить ко всем на листе</button>
+                          <button onClick={applyStyleToAllEverywhere} className="px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold">Применить ко всем везде</button>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <label className="flex flex-col gap-1 text-xs">Фон
