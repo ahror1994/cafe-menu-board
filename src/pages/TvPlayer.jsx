@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { loadStore } from '../lib/store';
 import GlassPill from '../components/GlassPill';
+import DisplacementTransition from '../components/DisplacementTransition';
 
 const variants = {
   fade: { initial: { opacity: 0, scale: 1.04, filter: 'blur(6px)' }, animate: { opacity: 1, scale: 1, filter: 'blur(0px)' }, exit: { opacity: 0, scale: 0.98, filter: 'blur(6px)' } },
@@ -11,42 +12,24 @@ const variants = {
   blinds: { initial: { clipPath: 'inset(0 100% 0 0)', opacity: 0 }, animate: { clipPath: 'inset(0 0% 0 0)', opacity: 1 }, exit: { clipPath: 'inset(0 0 0 100%)', opacity: 0 } },
   cube: { initial: { rotateY: 90, opacity: 0, transformOrigin: 'right center' }, animate: { rotateY: 0, opacity: 1 }, exit: { rotateY: -90, opacity: 0, transformOrigin: 'left center' } },
   pixel: { initial: { opacity: 0, filter: 'blur(10px) contrast(1.5)' }, animate: { opacity: 1, filter: 'blur(0px) contrast(1)' }, exit: { opacity: 0, filter: 'blur(12px)' } },
-  displacement: { initial: { opacity: 0, filter: 'blur(8px) contrast(1.2)', scale: 1.03 }, animate: { opacity: 1, filter: 'blur(0px) contrast(1)', scale: 1 }, exit: { opacity: 0, filter: 'blur(10px)', scale: 0.98 } },
 };
 
 function Slide({ slide }) {
   const isVideo = slide.type === 'video';
-  const isDisp = slide.transition === 'displacement';
   return (
-    <motion.div
-      key={slide.id}
-      variants={variants[slide.transition] || variants.fade}
-      initial="initial" animate="animate" exit="exit"
-      transition={{ duration: isDisp ? 1.0 : 0.9, ease: [0.22, 1, 0.36, 1] }}
-      className="absolute inset-0 overflow-hidden bg-black"
-      style={{ perspective: 1200 }}
-    >
+    <div className="absolute inset-0 overflow-hidden bg-black" style={{ perspective: 1200 }}>
       {isVideo ? (
         <video src={slide.bg} autoPlay muted loop playsInline preload="auto" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
-        <motion.img
-          src={slide.bg}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          initial={{ scale: isDisp ? 1.06 : 1.08 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: slide.duration + 1, ease: 'linear' }}
-        />
+        <motion.img src={slide.bg} alt="" className="absolute inset-0 w-full h-full object-cover" initial={{ scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: slide.duration + 1, ease: 'linear' }} />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10 pointer-events-none" />
-      {/* free-positioned pills, 1:1 with admin canvas — NO minWidth stretching; font scales with container */}
       {slide.items?.map((item, idx) => (
         <div key={item.id} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, fontSize: 'clamp(10px, 1.05vw, 22px)' }}>
           <GlassPill item={item} index={idx} />
         </div>
       ))}
-      {isDisp && <div className="absolute inset-0 pointer-events-none opacity-20 mix-blend-screen" style={{ background: `repeating-linear-gradient(90deg, transparent 0 2px, rgba(255,255,255,0.06) 2px 3px)` }} />}
-    </motion.div>
+    </div>
   );
 }
 
@@ -54,9 +37,24 @@ export default function TvPlayer() {
   const { id } = useParams();
   const [store, setStore] = useState(() => loadStore());
   const [idx, setIdx] = useState(0);
+  const [disp, setDisp] = useState(null); // {fromBg, toBg, key}
   const timerRef = useRef(null);
   const screen = store.screens.find((s) => s.id === id) || store.screens[0];
   const slides = screen?.slides?.length ? screen.slides : [];
+
+  const goNext = useCallback((nextIdx) => {
+    const cur = slides[idx];
+    const nxt = slides[nextIdx];
+    if (!cur || !nxt) return setIdx(nextIdx);
+    const useDisp = cur.transition === 'displacement' || nxt.transition === 'displacement';
+    // if either side is video, skip displacement (texture from video is messy)
+    const needsTexture = useDisp && cur.type !== 'video' && nxt.type !== 'video';
+    if (needsTexture) {
+      setDisp({ from: cur.bg, to: nxt.bg, pendingIdx: nextIdx, key: `${cur.id}->${nxt.id}-${Date.now()}` });
+    } else {
+      setIdx(nextIdx);
+    }
+  }, [slides, idx]);
 
   useEffect(() => {
     const onStorage = (e) => { if (e.key?.startsWith('cafe-menu')) setStore(loadStore()); };
@@ -64,13 +62,18 @@ export default function TvPlayer() {
     const iv = setInterval(() => setStore(loadStore()), 2000);
     return () => { window.removeEventListener('storage', onStorage); clearInterval(iv); };
   }, []);
-  useEffect(() => { setIdx(0); }, [id, screen?.id]);
+  useEffect(() => { setIdx(0); setDisp(null); }, [id, screen?.id]);
+
+  // autoplay
   useEffect(() => {
-    if (!slides.length) return;
+    if (!slides.length || disp) return; // pause while displacement plays
     const dur = (slides[idx]?.duration || 7) * 1000;
-    timerRef.current = setTimeout(() => setIdx((v) => (v + 1) % slides.length), dur);
+    timerRef.current = setTimeout(() => {
+      const next = (idx + 1) % slides.length;
+      goNext(next);
+    }, dur);
     return () => clearTimeout(timerRef.current);
-  }, [idx, slides]);
+  }, [idx, slides, disp, goNext]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
@@ -87,38 +90,77 @@ export default function TvPlayer() {
     const onMove = () => { setShowChrome(true); clearTimeout(t); };
     window.addEventListener('mousemove', onMove);
     return () => { clearTimeout(t); window.removeEventListener('mousemove', onMove); };
-  }, [isFullscreen, idx]);
+  }, [isFullscreen, idx, disp]);
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'ArrowRight') setIdx((v) => (v + 1) % slides.length);
-      if (e.key === 'ArrowLeft') setIdx((v) => (v - 1 + slides.length) % slides.length);
+      if (disp) return;
+      if (e.key === 'ArrowRight') goNext((idx + 1) % slides.length);
+      if (e.key === 'ArrowLeft') goNext((idx - 1 + slides.length) % slides.length);
       if (e.key === 'f' || e.key === 'F') containerRef.current?.requestFullscreen?.().catch(() => {});
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [slides.length]);
+  }, [slides.length, idx, disp, goNext]);
+
   async function toggleFullscreen() {
     try { if (!document.fullscreenElement) await containerRef.current?.requestFullscreen(); else await document.exitFullscreen(); } catch {}
   }
+  function handleDispDone() {
+    if (disp) {
+      setIdx(disp.pendingIdx);
+      setDisp(null);
+    }
+  }
+
   if (!slides.length) return <div className="w-screen h-screen grid place-items-center text-white/60">Нет слайдов — добавь в /admin</div>;
   const current = slides[idx];
+
+  const useFramer = !disp;
+  // displacement takes over: render GL canvas instead of framer
   return (
     <div ref={containerRef} className="w-screen h-screen bg-black overflow-hidden relative select-none">
       <div className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2 bg-black/55 backdrop-blur text-white/90 text-xs tracking-wide transition-opacity duration-500 ${isFullscreen && !showChrome ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с</span>
+        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с {disp ? '• liquid warp…' : ''}</span>
         <span className="flex items-center gap-2">
           <span className="opacity-60 hidden sm:inline">← → листать • F фуллскрин</span>
           <button onClick={toggleFullscreen} className="px-3 py-1.5 rounded-full bg-white text-black font-bold hover:bg-zinc-100">{isFullscreen ? 'Выйти' : '⛶ На весь экран'}</button>
         </span>
       </div>
+
       <div className={`absolute inset-0 ${isFullscreen && !showChrome ? 'pt-0' : 'pt-8'} transition-all`} style={{ perspective: 1200 }}>
-        <AnimatePresence mode="wait" initial={false}>
-          <Slide key={current.id + idx} slide={current} />
-        </AnimatePresence>
+        {disp ? (
+          <>
+            {/* keep pills of target slide fading in during warp */}
+            <div key={disp.key} className="absolute inset-0">
+              <DisplacementTransition from={disp.from} to={disp.to} duration={1100} onDone={handleDispDone} />
+              {/* pills warp overlay — simple crossfade on top of GL */}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45, duration: 0.5 }} className="absolute inset-0 pointer-events-none">
+                {slides[disp.pendingIdx]?.items?.map((item, i) => (
+                  <motion.div key={item.id} initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 + i * 0.07 }} style={{ position: 'absolute', left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, fontSize: 'clamp(10px, 1.05vw, 22px)' }}>
+                    <GlassPill item={item} index={i} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </>
+        ) : useFramer ? (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={current.id + '-' + idx}
+              variants={variants[current.transition] || variants.fade}
+              initial="initial" animate="animate" exit="exit"
+              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute inset-0"
+            >
+              <Slide slide={current} />
+            </motion.div>
+          </AnimatePresence>
+        ) : null}
       </div>
-      {!isFullscreen && <button onClick={toggleFullscreen} className="absolute inset-0 z-10 cursor-pointer opacity-0" aria-label="tap for fullscreen" />}
+
+      {!isFullscreen && !disp && <button onClick={toggleFullscreen} className="absolute inset-0 z-10 cursor-pointer opacity-0" aria-label="tap for fullscreen" />}
       <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2 transition-opacity ${isFullscreen && !showChrome ? 'opacity-0' : 'opacity-100'}`}>
-        {slides.map((_, i) => <button key={i} onClick={() => setIdx(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />)}
+        {slides.map((_, i) => <button key={i} onClick={() => !disp && goNext(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />)}
       </div>
       <ReloadEachHour />
     </div>
