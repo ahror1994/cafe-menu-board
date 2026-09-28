@@ -32,16 +32,16 @@ try {
   } else {
     console.log(`[deploy] в облаке ещё нет данных (${res.status}) — уйдёт seed из public/data`);
   }
-  // 2) папка с картинками data/img
+  // 2) все файлы данных облака (data/img/*, data/video/* и т.д.)
   const treeRes = await ghApi('repos/ahror1994/cafe-menu-board/git/trees/gh-pages?recursive=1');
-  const imgFiles = (treeRes.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith('data/img/'));
-  for (const t of imgFiles) {
+  const dataFiles = (treeRes.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith('data/') && t.path !== 'data/menu.json');
+  for (const t of dataFiles) {
     const dest = 'dist/' + t.path;
     mkdirSync(path.dirname(dest), { recursive: true });
     const r = await fetch(`https://ahror1994.github.io/cafe-menu-board/${t.path}`);
     if (r.ok) writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
   }
-  if (imgFiles.length) console.log(`[deploy] картинки облака перенесены: ${imgFiles.length} шт.`);
+  if (dataFiles.length) console.log(`[deploy] файлы облака перенесены: ${dataFiles.length} шт.`);
 } catch (e) {
   console.warn('[deploy] не смог получить живые данные:', e.message);
 }

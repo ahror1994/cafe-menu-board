@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadStore, saveStore, resetStore, wipeOldKeys, clearMenuKeys, localTs, cacheStore, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
-import { fetchCloud, pushCloud, getToken, setToken, hasToken, checkToken, normalizeTokenInput } from '../lib/cloud';
+import { fetchCloud, pushCloud, uploadRepoFile, getToken, setToken, hasToken, checkToken, normalizeTokenInput } from '../lib/cloud';
 import CanvasStage from '../components/CanvasStage';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -246,6 +246,32 @@ export default function Admin() {
       img.src = url;
     });
   }
+  // video upload: файл целиком уезжает в облако (data/video/...), bg становится путём
+  const videoInputRef = React.useRef(null);
+  const [videoUploading, setVideoUploading] = useState(false);
+  async function onPickVideo(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('video/')) { alert('Выбери видеофайл MP4 (H.264)'); e.target.value = ''; return; }
+    if (f.size > 90 * 1024 * 1024) { alert('Файл больше 90 МБ. Сожми видео (MP4, H.264, 1080p) или возьми покороче.'); e.target.value = ''; return; }
+    if (!hasToken()) { alert('Сначала подключи облако (блок «☁ Облако» слева внизу) — видео грузится прямо в облако.'); setShowCloudPanel(true); e.target.value = ''; return; }
+    if (!confirm(`Загрузить видео (${Math.round(f.size / 1024 / 1024)} МБ) в облако? Это займёт 1-3 минуты — не закрывай страницу.`)) { e.target.value = ''; return; }
+    setVideoUploading(true);
+    try {
+      const url = await uploadRepoFile(f);
+      updateStore((d) => {
+        const sl = d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId);
+        sl.type = 'video';
+        sl.bg = url;
+      });
+    } catch (err) {
+      alert('Не удалось загрузить видео: ' + (err.message || err) + '. Проверь связь и попробуй ещё раз.');
+    } finally {
+      setVideoUploading(false);
+      e.target.value = '';
+    }
+  }
+
   async function onPickFile(e) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -437,12 +463,14 @@ export default function Admin() {
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-xs tracking-widest uppercase text-zinc-400">{slide.type === 'video' ? 'Ссылка на MP4' : 'Фон листа — загрузи свою картинку'}</span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onPickFile} className="hidden" />
+                      <input ref={videoInputRef} type="file" accept="video/mp4,video/webm,video/m4v" onChange={onPickVideo} className="hidden" />
                       <button onClick={() => fileInputRef.current?.click()} className="shrink-0 px-4 py-2.5 rounded-xl bg-white text-zinc-900 font-bold text-sm hover:bg-zinc-100">📤 Загрузить фото</button>
-                      <input value={slide.bg?.startsWith('data:') ? '— загружено из файла (сохранится на сайте) —' : slide.bg} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = e.target.value; })} placeholder="https://... или /my-photo.jpg или Загрузить фото" className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 outline-none text-xs" />
+                      <button onClick={() => videoInputRef.current?.click()} disabled={videoUploading} className={`shrink-0 px-4 py-2.5 rounded-xl text-sm font-bold ${videoUploading ? 'bg-zinc-700 text-zinc-300 animate-pulse' : 'bg-sky-600 text-white hover:bg-sky-500'}`}>{videoUploading ? '⏳ Загружаю видео… не закрывай страницу' : '🎬 Загрузить видео'}</button>
+                      <input value={slide.bg?.startsWith('data:') ? '— загружено из файла (сохранится на сайте) —' : slide.bg?.startsWith('/cafe-menu-board/data/video/') ? '— видео загружено в облако —' : slide.bg} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = e.target.value; })} placeholder="https://... или /my-photo.jpg или Загрузить фото" className="flex-1 min-w-[200px] px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 outline-none text-xs" />
                     </div>
-                    <span className="text-[11px] text-zinc-500">Загрузи JPG/PNG/WebP — сожмётся до 1920px и сохранится прямо на сайте (без внешних ссылок). Или вставь ссылку / путь <code className="bg-zinc-800 px-1 py-0.5 rounded">/file.jpg</code>. Видео MP4 H.264 1920×1080.</span>
+                    <span className="text-[11px] text-zinc-500">Фото: JPG/PNG/WebP — сожмётся до 1920px. Видео: MP4 (H.264), до 90 МБ — загрузится прямо в облако (1-3 мин). Или вставь ссылку / путь <code className="bg-zinc-800 px-1 py-0.5 rounded">/file.jpg</code>.</span>
                     {slide.bg?.startsWith('data:') && <button onClick={() => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).bg = 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=1920'; })} className="self-start text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700">Убрать загруженное → вернуть демо</button>}
                   </label>
                 </section>

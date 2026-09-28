@@ -111,6 +111,54 @@ async function gh(path, method = 'GET', body) {
   }
 }
 
+// Коммитит уже созданные блобы в ветку. При гонке/обрыве — повторяет целиком.
+async function commitFiles(files, message) {
+  let lastErr;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const ref = await gh(`/git/ref/heads/${BRANCH}`);
+      const commit = await gh(`/git/commits/${ref.object.sha}`);
+      const tree = await gh('/git/trees', 'POST', {
+        base_tree: commit.tree.sha,
+        tree: files,
+      });
+      const newCommit = await gh('/git/commits', 'POST', {
+        message: message || `update ${new Date().toISOString()}`,
+        tree: tree.sha,
+        parents: [ref.object.sha],
+      });
+      await gh(`/git/refs/heads/${BRANCH}`, 'PATCH', { sha: newCommit.sha });
+      return newCommit;
+    } catch (e) {
+      lastErr = e;
+      // гонка на ветке или сетевой сбой — пауза и повтор целиком
+      if (!/409|422|Failed to fetch/i.test(String(e.message))) throw e;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+function bufToB64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+// Загружает видеофайл (или любой файл) в репозиторий и возвращает публичный путь.
+export async function uploadRepoFile(file) {
+  if (!hasToken()) throw new Error('NO_TOKEN');
+  const ext = (file.name.match(/\.(mp4|webm|m4v|mov)$/i) || [, 'mp4'])[1].toLowerCase();
+  const name = `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  const path = `data/video/${name}`;
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const blob = await gh('/git/blobs', 'POST', { content: bufToB64(buf), encoding: 'base64' });
+  await commitFiles([{ path, mode: '100644', type: 'blob', sha: blob.sha }], `video ${name}`);
+  return `${import.meta.env.BASE_URL}${path}`;
+}
+
 // Публикует данные коммитом в gh-pages. Возвращает ISO-время публикации.
 // При гонке (кто-то другой тоже двигает ветку) — повторяем от свежей головы несколько раз.
 export async function pushCloud(data) {
@@ -120,28 +168,6 @@ export async function pushCloud(data) {
     content: b64utf8(JSON.stringify({ updatedAt, data })),
     encoding: 'base64',
   });
-  let lastErr;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      const ref = await gh(`/git/ref/heads/${BRANCH}`);
-      const commit = await gh(`/git/commits/${ref.object.sha}`);
-      const tree = await gh('/git/trees', 'POST', {
-        base_tree: commit.tree.sha,
-        tree: [{ path: PATH, mode: '100644', type: 'blob', sha: blob.sha }],
-      });
-      const newCommit = await gh('/git/commits', 'POST', {
-        message: `menu update ${updatedAt}`,
-        tree: tree.sha,
-        parents: [ref.object.sha],
-      });
-      await gh(`/git/refs/heads/${BRANCH}`, 'PATCH', { sha: newCommit.sha });
-      return updatedAt;
-    } catch (e) {
-      lastErr = e;
-      // гонка на ветке или сетевой сбой — пауза и повтор целиком
-      if (!/409|422|Failed to fetch/i.test(String(e.message))) throw e;
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-    }
-  }
-  throw lastErr;
+  await commitFiles([{ path: PATH, mode: '100644', type: 'blob', sha: blob.sha }], `menu update ${updatedAt}`);
+  return updatedAt;
 }
