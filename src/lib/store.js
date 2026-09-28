@@ -109,7 +109,7 @@ const RAW_DEFAULT = {
   ],
 };
 
-function normalizeStore(raw) {
+export function normalizeStore(raw) {
   if (!raw || !raw.screens) return normalizeStore(RAW_DEFAULT);
   const screens = raw.screens.map((sc) => ({
     id: sc.id,
@@ -127,7 +127,6 @@ function normalizeStore(raw) {
 }
 
 const DEFAULT = normalizeStore(RAW_DEFAULT);
-
 export function loadStore() {
   try {
     let raw = localStorage.getItem(KEY);
@@ -156,6 +155,26 @@ export function wipeOldKeys() {
 export function saveStore(data) {
   localStorage.setItem(KEY, JSON.stringify(data));
   localStorage.setItem(KEY + '_ts', Date.now().toString());
+}
+
+// время последней правки на этом устройстве (0 = здесь не редактировали)
+export function localTs() {
+  try { return Number(localStorage.getItem(KEY + '_ts') || 0); } catch { return 0; }
+}
+
+// записать данные в кэш, не помечая их как «свежая правка» (приходит из облака)
+export function cacheStore(data, ts) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(data));
+    localStorage.setItem(KEY + '_ts', String(ts || 0));
+  } catch {}
+}
+
+// чистим только данные меню — токен облака и другой localStorage не трогаем
+export function clearMenuKeys() {
+  for (const k of [...OLD_KEYS, KEY]) {
+    try { localStorage.removeItem(k); localStorage.removeItem(k + '_ts'); } catch {}
+  }
 }
 
 export function resetStore() {

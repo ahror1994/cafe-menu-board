@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { loadStore } from '../lib/store';
+import { loadStore, cacheStore } from '../lib/store';
+import { fetchCloud } from '../lib/cloud';
 import GlassPill from '../components/GlassPill';
 import DisplacementTransition from '../components/DisplacementTransition';
 
@@ -62,6 +63,24 @@ export default function TvPlayer() {
     const iv = setInterval(() => setStore(loadStore()), 2000);
     return () => { window.removeEventListener('storage', onStorage); clearInterval(iv); };
   }, []);
+
+  // облако: подтягиваем свежие данные сами (кэш браузера сводит трафик к дешёвым проверкам)
+  const lastCloud = useRef('');
+  const pollCloud = useCallback(async () => {
+    const cloud = await fetchCloud(30000, false);
+    if (!cloud?.updatedAt || cloud.updatedAt === lastCloud.current) return;
+    lastCloud.current = cloud.updatedAt;
+    setStore(cloud.data);
+    cacheStore(cloud.data, Date.parse(cloud.updatedAt) || Date.now());
+  }, []);
+  useEffect(() => {
+    pollCloud();
+    const iv = setInterval(pollCloud, 60000);
+    const onVis = () => { if (document.visibilityState !== 'hidden') pollCloud(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('online', pollCloud);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('online', pollCloud); };
+  }, [pollCloud]);
   useEffect(() => { setIdx(0); setDisp(null); }, [id, screen?.id]);
 
   // autoplay

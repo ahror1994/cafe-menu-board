@@ -9,9 +9,10 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy": "gh-pages -d dist"
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "framer-motion": "^13.4.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

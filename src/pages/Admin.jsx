@@ -1,9 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { loadStore, saveStore, resetStore, wipeOldKeys, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
+import { loadStore, saveStore, resetStore, wipeOldKeys, clearMenuKeys, localTs, cacheStore, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
+import { fetchCloud, pushCloud, getToken, setToken, hasToken } from '../lib/cloud';
 import CanvasStage from '../components/CanvasStage';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+}
 
 export default function Admin() {
   const [store, setStore] = useState(() => loadStore());
@@ -11,7 +16,108 @@ export default function Admin() {
   const [activeSlideId, setActiveSlideId] = useState(store.screens[0]?.slides[0]?.id);
   const [selectedId, setSelectedId] = useState(store.screens[0]?.slides[0]?.items[0]?.id || null);
 
-  useEffect(() => { saveStore(store); wipeOldKeys(); }, [store]);
+  // ---- cloud sync state ----
+  const [cloud, setCloud] = useState({ s: 'init' }); // init|check|queued|push|ok|err|no|newerLocal
+  const [showCloudPanel, setShowCloudPanel] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const storeRef = useRef(store);
+  const dirtyRef = useRef(false); // редактировали в этой сессии
+  const firstRun = useRef(true);
+  const skipSync = useRef(true); // пропуск сохранения, когда данные пришли из облака
+  const syncStarted = useRef(false);
+  const pushTimer = useRef(null);
+  const pushingRef = useRef(false);
+  const pendingRef = useRef(false);
+
+  useEffect(() => { storeRef.current = store; }, [store]);
+
+  // изменения: сохраняем локально + в очередь на публикацию (первый рендер и подлив из облака — мимо)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    if (skipSync.current) { skipSync.current = false; return; }
+    dirtyRef.current = true;
+    saveStore(store);
+    schedulePush();
+  }, [store]);
+
+  function schedulePush() {
+    if (!hasToken()) { setCloud((c) => (c.s === 'ok' || c.s === 'err' ? c : { s: 'no' })); return; }
+    clearTimeout(pushTimer.current);
+    setCloud((c) => (c.s === 'push' ? c : { s: 'queued' }));
+    pushTimer.current = setTimeout(doPush, 4000);
+  }
+
+  async function doPush() {
+    if (pushingRef.current) { pendingRef.current = true; return; }
+    pushingRef.current = true;
+    setCloud({ s: 'push' });
+    try {
+      const at = await pushCloud(storeRef.current);
+      setCloud({ s: 'ok', at });
+    } catch (e) {
+      setCloud({ s: 'err', msg: String(e.message || e) });
+    } finally {
+      pushingRef.current = false;
+      if (pendingRef.current) { pendingRef.current = false; setTimeout(doPush, 500); }
+    }
+  }
+
+  async function initialSync() {
+    if (syncStarted.current) return;
+    syncStarted.current = true;
+    wipeOldKeys();
+    setCloud({ s: 'check' });
+    const token = getToken();
+    const cloudRes = await fetchCloud(15000);
+    const lt = localTs();
+    if (cloudRes) {
+      const ct = Date.parse(cloudRes.updatedAt) || 0;
+      if (lt > ct + 2000) {
+        // в этом браузере правки новее облака — выгружаем
+        if (token) {
+          setCloud({ s: 'push' });
+          try { const at = await pushCloud(storeRef.current); setCloud({ s: 'ok', at }); } catch (e) { setCloud({ s: 'err', msg: String(e.message || e) }); }
+        } else setCloud({ s: 'newerLocal' });
+      } else {
+        // облако актуальнее или то же — забираем
+        if (!dirtyRef.current) {
+          skipSync.current = true;
+          setStore(cloudRes.data);
+          cacheStore(cloudRes.data, ct);
+        }
+        setCloud({ s: 'ok', at: cloudRes.updatedAt });
+      }
+    } else if (token) {
+      setCloud({ s: 'push' });
+      try { const at = await pushCloud(storeRef.current); setCloud({ s: 'ok', at }); } catch (e) { setCloud({ s: 'err', msg: String(e.message || e) }); }
+    } else {
+      setCloud({ s: 'no' });
+    }
+  }
+
+  // один раз при открытии: импорт токена из ссылки-подключения (#gh=...) + синк с облаком
+  useEffect(() => {
+    const m = (window.location.hash || '').match(/[#&]gh=([A-Za-z0-9._-]+)/);
+    if (m) {
+      setToken(decodeURIComponent(m[1]));
+      try { history.replaceState(null, '', window.location.pathname + window.location.search + '#/admin'); } catch {}
+    }
+    initialSync();
+    return () => { syncStarted.current = false; };
+  }, []);
+
+  async function manualPull() {
+    setCloud({ s: 'check' });
+    const cloudRes = await fetchCloud(15000);
+    if (cloudRes) {
+      skipSync.current = true;
+      setStore(cloudRes.data);
+      cacheStore(cloudRes.data, Date.parse(cloudRes.updatedAt) || Date.now());
+      setCloud({ s: 'ok', at: cloudRes.updatedAt });
+      setActiveScreenId(cloudRes.data.screens[0]?.id);
+      setActiveSlideId(cloudRes.data.screens[0]?.slides[0]?.id);
+    } else setCloud({ s: 'err', msg: 'облако недоступно' });
+  }
 
   const screen = store.screens.find((s) => s.id === activeScreenId);
   const slide = screen?.slides.find((s) => s.id === activeSlideId);
@@ -104,17 +210,42 @@ export default function Admin() {
     finally { e.target.value = ''; }
   }
 
+  function resetToDemo() {
+    if (!confirm('Сбросить всё к демо? Твоё текущее меню заменится демо-данными (и в облаке тоже).')) return;
+    clearMenuKeys();
+    const s = resetStore();
+    dirtyRef.current = true;
+    setStore(s);
+    setActiveScreenId(s.screens[0].id);
+    setActiveSlideId(s.screens[0].slides[0].id);
+    setSelectedId(s.screens[0].slides[0].items[0]?.id || null);
+    if (hasToken()) doPush();
+  }
+
+  const cloudChip = (() => {
+    const base = 'text-[11px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap cursor-pointer';
+    switch (cloud.s) {
+      case 'ok': return <span onClick={() => setShowCloudPanel(true)} className={`${base} bg-emerald-600/20 text-emerald-300 border border-emerald-600/40`}>☁ в облаке {fmtTime(cloud.at)}</span>;
+      case 'push': return <span className={`${base} bg-sky-600/20 text-sky-300 border border-sky-600/40 animate-pulse`}>☁ публикую…</span>;
+      case 'queued': return <span className={`${base} bg-sky-600/20 text-sky-300 border border-sky-600/40`}>☁ скоро опубликую</span>;
+      case 'check': return <span className={`${base} bg-zinc-700/40 text-zinc-300 border border-zinc-600`}>☁ проверяю…</span>;
+      case 'err': return <span onClick={() => setShowCloudPanel(true)} className={`${base} bg-red-600/20 text-red-300 border border-red-600/40`}>☁ ошибка: {cloud.msg || 'нет связи'}</span>;
+      default: return <span onClick={() => setShowCloudPanel(true)} className={`${base} bg-amber-600/20 text-amber-300 border border-amber-600/40`}>☁ не подключено</span>;
+    }
+  })();
+
   return (
     <div className="min-h-screen bg-[#0f0f10] text-zinc-100 flex flex-col">
       <header className="sticky top-0 z-30 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
         <div className="max-w-[1480px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Cafe Menu Board — Админка</h1>
-            <p className="text-xs text-zinc-400">Figma-холст: тяни плашки мышкой куда хочешь → на ТВ будет 1-в-1. Прозрачность / блюр / цвет — всё настраивается.</p>
+            <p className="text-xs text-zinc-400">Figma-холст: тяни плашки мышкой куда хочешь → на ТВ будет 1-в-1. Данные живут в облаке — все устройства видят одно и то же.</p>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => { if (!confirm('Сбросить всё к демо? Старые данные из браузера удалятся.')) return; try { localStorage.clear(); } catch {} const s = resetStore(); setStore(s); setActiveScreenId(s.screens[0].id); setActiveSlideId(s.screens[0].slides[0].id); setSelectedId(s.screens[0].slides[0].items[0]?.id || null); location.reload(); }} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">Сбросить демо</button>
-            <button onClick={() => { try { localStorage.clear(); } catch {} alert('Кэш очищен. Перезагружаю...'); location.reload(); }} className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold">Очистить кэш</button>
+          <div className="flex gap-2 items-center">
+            {cloudChip}
+            <button onClick={resetToDemo} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">Сбросить демо</button>
+            <button onClick={() => { clearMenuKeys(); alert('Кэш меню очищен. Данные подтянутся из облака.'); location.reload(); }} className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold">Очистить кэш</button>
             <Link to={`/tv/${activeScreenId}`} target="_blank" className="px-4 py-2 rounded-xl bg-white text-zinc-900 font-semibold text-sm hover:bg-zinc-100">Открыть ТВ ▶</Link>
           </div>
         </div>
@@ -169,6 +300,32 @@ export default function Admin() {
               </div>
             </div>
           )}
+
+          {/* ---- облако ---- */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 flex flex-col gap-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold tracking-wide">☁ Облако — все устройства</span>
+              {hasToken() ? <span className="text-emerald-400 font-bold">подключено ✓</span> : <span className="text-amber-400 font-bold">не подключено</span>}
+            </div>
+            {!hasToken() ? (
+              <>
+                <p className="text-zinc-400 leading-relaxed">Пока правки сохраняются только в этом браузере. Открой ссылку-подключение (прислал ассистент) или вставь токен вручную:</p>
+                <div className="flex gap-1.5">
+                  <input value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder="вставь токен gho_..." className="flex-1 min-w-0 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 outline-none font-mono text-[11px]" />
+                  <button onClick={() => { if (!tokenInput.trim()) return; setToken(tokenInput); setTokenInput(''); setShowCloudPanel(false); initialSync(); }} className="px-3 py-2 rounded-lg bg-white text-zinc-900 font-bold hover:bg-zinc-100">OK</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-zinc-400 leading-relaxed">Правки публикуются в облако сами ~4 сек после того, как остановился. ТВ подтягивает до 10 мин. Редактируй с одного устройства за раз.</p>
+                <div className="flex gap-1.5">
+                  <button onClick={doPush} className="flex-1 px-2 py-2 rounded-lg bg-white text-zinc-900 font-bold hover:bg-zinc-100">⬆ Выгрузить сейчас</button>
+                  <button onClick={manualPull} className="flex-1 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 font-semibold">⬇ Забрать из облака</button>
+                </div>
+                <button onClick={() => { setToken(''); setCloud({ s: 'no' }); }} className="self-start text-zinc-500 underline hover:text-zinc-300">Отключить токен</button>
+              </>
+            )}
+          </div>
         </aside>
 
         <main className="flex-1 min-w-0 p-6 flex flex-col gap-6 overflow-auto">
@@ -347,9 +504,9 @@ export default function Admin() {
                 </section>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 flex items-center justify-between">
-                <div className="text-sm text-zinc-400">Сохранение автоматическое. Клиенту дашь только ссылку <code className="bg-zinc-800 px-1.5 py-0.5 rounded">#/admin</code>.</div>
-                <button onClick={() => { saveStore(store); alert('Сохранено! На ТВ обновится за 2 сек.'); }} className="px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-900 font-bold hover:bg-emerald-400">Сохранить</button>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 flex items-center justify-between gap-4">
+                <div className="text-sm text-zinc-400">Сохраняется автоматически: в этом браузере сразу, в облако — через ~4 сек после последней правки. На ТВ обновится само (до 10 мин, обычно быстрее).</div>
+                <button onClick={() => { saveStore(store); doPush(); }} className="px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-900 font-bold hover:bg-emerald-400">Сохранить</button>
               </div>
             </>
           )}
