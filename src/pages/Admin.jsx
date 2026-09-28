@@ -285,18 +285,6 @@ export default function Admin() {
     finally { e.target.value = ''; }
   }
 
-  function resetToDemo() {
-    if (!confirm('Сбросить всё к демо? Твоё текущее меню заменится демо-данными (и в облаке тоже).')) return;
-    clearMenuKeys();
-    const s = resetStore();
-    dirtyRef.current = true;
-    setStore(s);
-    setActiveScreenId(s.screens[0].id);
-    setActiveSlideId(s.screens[0].slides[0].id);
-    setSelectedId(s.screens[0].slides[0].items[0]?.id || null);
-    if (hasToken()) doPush();
-  }
-
   const cloudChip = (() => {
     const base = 'text-[11px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap cursor-pointer';
     switch (cloud.s) {
@@ -319,8 +307,7 @@ export default function Admin() {
           </div>
           <div className="flex gap-2 items-center">
             {cloudChip}
-            <button onClick={resetToDemo} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">Сбросить демо</button>
-            <button onClick={() => { clearMenuKeys(); alert('Кэш меню очищен. Данные подтянутся из облака.'); location.reload(); }} className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold">Очистить кэш</button>
+            <button onClick={() => { clearMenuKeys(); location.reload(); }} title="Стереть локальную копию и взять свежую из облака" className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm border border-zinc-700">⟳ Обновить данные</button>
             <Link to={`/tv/${activeScreenId}`} target="_blank" className="px-4 py-2 rounded-xl bg-white text-zinc-900 font-semibold text-sm hover:bg-zinc-100">Открыть ТВ ▶</Link>
           </div>
         </div>
