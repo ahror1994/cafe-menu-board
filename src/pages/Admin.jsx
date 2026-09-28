@@ -309,10 +309,15 @@ export default function Admin() {
             </div>
             <div className="flex flex-col gap-2">
               {store.screens.map((s) => (
-                <button key={s.id} onClick={() => { setActiveScreenId(s.id); setActiveSlideId(s.slides[0]?.id); }} className={`text-left px-3 py-3 rounded-xl border flex items-center justify-between ${activeScreenId === s.id ? 'bg-white text-zinc-900 border-white' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'}`}>
-                  <span className="font-medium text-sm">{s.name}</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${activeScreenId === s.id ? 'bg-zinc-900 text-white' : 'bg-zinc-800 text-zinc-300'}`}>{s.slides.length} листов</span>
-                </button>
+                <div key={s.id} className={`group relative rounded-xl border ${activeScreenId === s.id ? 'bg-white text-zinc-900 border-white' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'}`}>
+                  <button onClick={() => { setActiveScreenId(s.id); setActiveSlideId(s.slides[0]?.id); }} className="w-full text-left px-3 py-3 flex items-center justify-between">
+                    <span className="font-medium text-sm">{s.name}</span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${activeScreenId === s.id ? 'bg-zinc-900 text-white' : 'bg-zinc-800 text-zinc-300'}`}>{s.slides.length} листов</span>
+                  </button>
+                  {store.screens.length > 1 && (
+                    <button onClick={(e) => { e.stopPropagation(); if (!confirm(`Удалить «${s.name}» со всеми листами (${s.slides.length} шт.)?`)) return; const wasActive = activeScreenId === s.id; updateStore((d) => { d.screens = d.screens.filter((x) => x.id !== s.id); }); if (wasActive) { const nxt = store.screens.find((x) => x.id !== s.id); if (nxt) { setActiveScreenId(nxt.id); setActiveSlideId(nxt.slides[0]?.id); setSelectedId(nxt.slides[0]?.items[0]?.id || null); } } }} title="Удалить экран" className="absolute -top-1.5 -right-1.5 w-6 h-6 grid place-items-center rounded-full bg-red-600 text-white text-xs opacity-0 group-hover:opacity-100 transition shadow">✕</button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
