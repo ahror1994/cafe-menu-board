@@ -29,6 +29,7 @@ export default function Admin() {
   const pushTimer = useRef(null);
   const pushingRef = useRef(false);
   const pendingRef = useRef(false);
+  const autoRetry = useRef(0);
 
   useEffect(() => { storeRef.current = store; }, [store]);
 
@@ -43,6 +44,7 @@ export default function Admin() {
 
   function schedulePush() {
     if (!hasToken()) { setCloud((c) => (c.s === 'ok' || c.s === 'err' ? c : { s: 'no' })); return; }
+    autoRetry.current = 0;
     clearTimeout(pushTimer.current);
     setCloud((c) => (c.s === 'push' ? c : { s: 'queued' }));
     pushTimer.current = setTimeout(doPush, 4000);
@@ -60,12 +62,19 @@ export default function Admin() {
     setCloud({ s: 'push' });
     try {
       const at = await pushCloud(storeRef.current);
+      autoRetry.current = 0;
       setCloud({ s: 'ok', at });
       setConnectMsg('');
     } catch (e) {
       const msg = String(e.message || e);
-      const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError|Load failed/i.test(msg) ? ' — нет связи с api.github.com с этой сети: включи VPN в браузере или редактируй с другого компа' : '';
+      const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError|Load failed/i.test(msg) ? ' — связь с GitHub рвётся, пробую дальше сам' : '';
       setCloud({ s: 'err', msg: msg + hint });
+      // сеть дёргается — доталкиваем сами, пока не уйдёт
+      if (/Failed to fetch|409|422|unstable/i.test(msg) && autoRetry.current < 10) {
+        autoRetry.current++;
+        clearTimeout(pushTimer.current);
+        pushTimer.current = setTimeout(doPush, 15000);
+      }
     } finally {
       pushingRef.current = false;
       if (pendingRef.current) { pendingRef.current = false; setTimeout(doPush, 500); }
