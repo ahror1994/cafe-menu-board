@@ -57,10 +57,19 @@ export default function TvPlayer() {
     }
   }, [slides, idx]);
 
+  // локальные изменения (другая вкладка): перечитываем ТОЛЬКО если данные реально
+  // поменялись — иначе каждый setStore создаёт новый объект и сбрасывает таймер слайдов
+  const lastLocalTs = useRef('');
   useEffect(() => {
-    const onStorage = (e) => { if (e.key?.startsWith('cafe-menu')) setStore(loadStore()); };
+    const onStorage = (e) => { if (e.key?.startsWith('cafe-menu')) { lastLocalTs.current = ''; setStore(loadStore()); } };
     window.addEventListener('storage', onStorage);
-    const iv = setInterval(() => setStore(loadStore()), 2000);
+    const iv = setInterval(() => {
+      let ts = '';
+      try { ts = localStorage.getItem('cafe-menu-v3_ts') || ''; } catch {}
+      if (ts === lastLocalTs.current) return;
+      lastLocalTs.current = ts;
+      setStore(loadStore());
+    }, 2000);
     return () => { window.removeEventListener('storage', onStorage); clearInterval(iv); };
   }, []);
 
