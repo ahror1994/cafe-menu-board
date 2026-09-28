@@ -27,4 +27,4 @@ try {
   console.warn('[deploy] не смог получить живые данные:', e.message);
 }
 
-run('npx', ['gh-pages', '-d', 'dist', '-m', `deploy ${new Date().toISOString()}`]);
+run('npx', ['gh-pages', '-d', 'dist']);
