@@ -6,6 +6,9 @@ import { fetchCloud } from '../lib/cloud';
 import GlassPill from '../components/GlassPill';
 import DisplacementTransition from '../components/DisplacementTransition';
 
+// метка версии сборки — видна в верхней полосе ТВ, чтобы понимать: свежая версия или кэш
+const APP_VERSION = '2026-09-28.3';
+
 const variants = {
   fade: { initial: { opacity: 0, scale: 1.04, filter: 'blur(6px)' }, animate: { opacity: 1, scale: 1, filter: 'blur(0px)' }, exit: { opacity: 0, scale: 0.98, filter: 'blur(6px)' } },
   slide: { initial: { x: '100%', opacity: 0 }, animate: { x: 0, opacity: 1 }, exit: { x: '-30%', opacity: 0 } },
@@ -148,7 +151,7 @@ export default function TvPlayer() {
   return (
     <div ref={containerRef} className="w-screen h-screen bg-black overflow-hidden relative select-none">
       <div className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2 bg-black/55 backdrop-blur text-white/90 text-xs tracking-wide transition-opacity duration-500 ${isFullscreen && !showChrome ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с {disp ? '• liquid warp…' : ''}</span>
+        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с • v{APP_VERSION} {disp ? '• liquid warp…' : ''}</span>
         <span className="flex items-center gap-2">
           <span className="opacity-60 hidden sm:inline">← → листать • F фуллскрин</span>
           <button onClick={toggleFullscreen} className="px-3 py-1.5 rounded-full bg-white text-black font-bold hover:bg-zinc-100">{isFullscreen ? 'Выйти' : '⛶ На весь экран'}</button>
