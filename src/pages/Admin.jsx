@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadStore, saveStore, resetStore, wipeOldKeys, clearMenuKeys, localTs, cacheStore, TRANSITIONS, createEmptyItem, hexToRgba } from '../lib/store';
-import { fetchCloud, pushCloud, getToken, setToken, hasToken } from '../lib/cloud';
+import { fetchCloud, pushCloud, getToken, setToken, hasToken, checkToken, normalizeTokenInput } from '../lib/cloud';
 import CanvasStage from '../components/CanvasStage';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -20,6 +20,7 @@ export default function Admin() {
   const [cloud, setCloud] = useState({ s: 'init' }); // init|check|queued|push|ok|err|no|newerLocal
   const [showCloudPanel, setShowCloudPanel] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [connectMsg, setConnectMsg] = useState('');
   const storeRef = useRef(store);
   const dirtyRef = useRef(false); // редактировали в этой сессии
   const firstRun = useRef(true);
@@ -55,7 +56,9 @@ export default function Admin() {
       const at = await pushCloud(storeRef.current);
       setCloud({ s: 'ok', at });
     } catch (e) {
-      setCloud({ s: 'err', msg: String(e.message || e) });
+      const msg = String(e.message || e);
+      const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError/i.test(msg) ? ' — нет доступа к api.github.com с этой сети' : '';
+      setCloud({ s: 'err', msg: msg + hint });
     } finally {
       pushingRef.current = false;
       if (pendingRef.current) { pendingRef.current = false; setTimeout(doPush, 500); }
@@ -76,7 +79,8 @@ export default function Admin() {
         // в этом браузере правки новее облака — выгружаем
         if (token) {
           setCloud({ s: 'push' });
-          try { const at = await pushCloud(storeRef.current); setCloud({ s: 'ok', at }); } catch (e) { setCloud({ s: 'err', msg: String(e.message || e) }); }
+          try { const at = await pushCloud(storeRef.current); setCloud({ s: 'ok', at }); }
+          catch (e) { setCloud({ s: 'err', msg: String(e.message || e) + ' — вставь ссылку из «ПОДКЛЮЧЕНИЕ-меню.txt» заново' }); }
         } else setCloud({ s: 'newerLocal' });
       } else {
         // облако актуальнее или то же — забираем
@@ -117,6 +121,36 @@ export default function Admin() {
       setActiveScreenId(cloudRes.data.screens[0]?.id);
       setActiveSlideId(cloudRes.data.screens[0]?.slides[0]?.id);
     } else setCloud({ s: 'err', msg: 'облако недоступно' });
+  }
+
+  // подключение токена: проверяем сразу, чтобы плохой токен не молчал до первой правки
+  async function connectToken() {
+    const t = normalizeTokenInput(tokenInput);
+    if (!t) return;
+    setConnectMsg('проверяю токен…');
+    try {
+      const login = await checkToken();
+      setToken(t);
+      setConnectMsg('✓ Токен работает, аккаунт: ' + login);
+      setTokenInput('');
+      await initialSync();
+    } catch (e) {
+      setToken('');
+      setCloud({ s: 'no' });
+      setConnectMsg('✗ Токен не работает: ' + String(e.message || e) + ' — скопируй из файла «ПОДКЛЮЧЕНИЕ-меню.txt» ДЛИННУЮ ССЫЛКУ целиком и вставь её сюда (можно прямо всю ссылку).');
+    }
+  }
+
+  async function testConnection() {
+    setConnectMsg('проверяю…');
+    try {
+      const login = await checkToken();
+      setConnectMsg('✓ Токен работает, аккаунт: ' + login);
+    } catch (e) {
+      setToken('');
+      setCloud({ s: 'no' });
+      setConnectMsg('✗ Токен не работает: ' + String(e.message || e) + ' — вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново.');
+    }
   }
 
   const screen = store.screens.find((s) => s.id === activeScreenId);
@@ -309,11 +343,12 @@ export default function Admin() {
             </div>
             {!hasToken() ? (
               <>
-                <p className="text-zinc-400 leading-relaxed">Пока правки сохраняются только в этом браузере. Открой ссылку-подключение (прислал ассистент) или вставь токен вручную:</p>
+                <p className="text-zinc-400 leading-relaxed">Пока правки сохраняются только в этом браузере. Вставь сюда длинную ссылку-подключение из файла «ПОДКЛЮЧЕНИЕ-меню.txt» (целиком, можно прямо всю ссылку):</p>
                 <div className="flex gap-1.5">
-                  <input value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder="вставь токен gho_..." className="flex-1 min-w-0 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 outline-none font-mono text-[11px]" />
-                  <button onClick={() => { if (!tokenInput.trim()) return; setToken(tokenInput); setTokenInput(''); setShowCloudPanel(false); initialSync(); }} className="px-3 py-2 rounded-lg bg-white text-zinc-900 font-bold hover:bg-zinc-100">OK</button>
+                  <input value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder="ссылка https://...#gh=... или токен gho_..." className="flex-1 min-w-0 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 outline-none font-mono text-[11px]" />
+                  <button onClick={connectToken} className="px-3 py-2 rounded-lg bg-white text-zinc-900 font-bold hover:bg-zinc-100">OK</button>
                 </div>
+                {connectMsg && <p className={`leading-relaxed ${connectMsg.startsWith('✓') ? 'text-emerald-300' : connectMsg.startsWith('✗') ? 'text-red-300' : 'text-zinc-400'}`}>{connectMsg}</p>}
               </>
             ) : (
               <>
@@ -322,7 +357,11 @@ export default function Admin() {
                   <button onClick={doPush} className="flex-1 px-2 py-2 rounded-lg bg-white text-zinc-900 font-bold hover:bg-zinc-100">⬆ Выгрузить сейчас</button>
                   <button onClick={manualPull} className="flex-1 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 font-semibold">⬇ Забрать из облака</button>
                 </div>
-                <button onClick={() => { setToken(''); setCloud({ s: 'no' }); }} className="self-start text-zinc-500 underline hover:text-zinc-300">Отключить токен</button>
+                <div className="flex gap-1.5 items-center">
+                  <button onClick={testConnection} className="px-2 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-[11px] hover:bg-zinc-700">🔌 Проверить соединение</button>
+                  <button onClick={() => { setToken(''); setCloud({ s: 'no' }); setConnectMsg(''); }} className="text-zinc-500 underline hover:text-zinc-300 text-[11px]">Отключить токен</button>
+                </div>
+                {connectMsg && <p className={`leading-relaxed ${connectMsg.startsWith('✓') ? 'text-emerald-300' : connectMsg.startsWith('✗') ? 'text-red-300' : 'text-zinc-400'}`}>{connectMsg}</p>}
               </>
             )}
           </div>

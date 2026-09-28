@@ -14,7 +14,20 @@ export function getToken() {
   try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
 }
 export function setToken(t) {
-  try { localStorage.setItem(TOKEN_KEY, (t || '').trim()); } catch {}
+  try { localStorage.setItem(TOKEN_KEY, normalizeTokenInput(t)); } catch {}
+}
+
+// принимает и голый токен, и целую ссылку-подключение (#gh=...)
+export function normalizeTokenInput(raw) {
+  const s = String(raw || '').trim();
+  const m = s.match(/gh=([A-Za-z0-9._-]+)/);
+  return m ? m[1] : s;
+}
+
+// мгновенная проверка: работает ли токен (возвращает логин аккаунта)
+export async function checkToken() {
+  const u = await gh('/user');
+  return u && u.login ? String(u.login) : 'ok';
 }
 export function hasToken() { return Boolean(getToken()); }
 
