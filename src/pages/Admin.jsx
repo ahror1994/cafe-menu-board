@@ -168,6 +168,31 @@ export default function Admin() {
     return '✗ Токен не работает: ' + msg + ' — скопируй из файла «ПОДКЛЮЧЕНИЕ-меню.txt» ДЛИННУЮ ССЫЛКУ целиком (от «https» до конца) и вставь её сюда.';
   }
 
+  // защита от «перетирания»: если облако свежее локального — обновляем редактор
+  // сами (пока ничего не правят) или предупреждаем (если уже правят)
+  const [cloudNewer, setCloudNewer] = useState('');
+  const cloudNewerTs = useRef(0);
+  useEffect(() => {
+    const iv = setInterval(async () => {
+      if (document.hidden) return;
+      const c = await fetchCloud(8000, false);
+      if (!c?.updatedAt) return;
+      const ct = Date.parse(c.updatedAt) || 0;
+      if (ct <= localTs() + 2000) { cloudNewerTs.current = 0; setCloudNewer(''); return; }
+      if (!dirtyRef.current) {
+        skipSync.current = true;
+        setStore(c.data);
+        cacheStore(c.data, ct);
+        setCloudNewer('');
+        cloudNewerTs.current = 0;
+      } else if (ct > cloudNewerTs.current) {
+        cloudNewerTs.current = ct;
+        setCloudNewer(c.updatedAt);
+      }
+    }, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
   const screen = store.screens.find((s) => s.id === activeScreenId);
   const slide = screen?.slides.find((s) => s.id === activeSlideId);
   const selected = slide?.items.find((x) => x.id === selectedId) || null;
@@ -299,6 +324,12 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-[#0f0f10] text-zinc-100 flex flex-col">
+      {cloudNewer && (
+        <div className="bg-amber-400 text-zinc-900 px-6 py-2.5 text-sm font-semibold flex flex-wrap items-center justify-between gap-2">
+          <span>⚠ В облаке данные новее ({fmtTime(cloudNewer)}). Если правок в этой вкладке не делал — забери их, иначе следующее сохранение перезапишет облако старой копией.</span>
+          <button onClick={async () => { if (!confirm('Забрать данные из облака? Несохранённые правки этой вкладки пропадут.')) return; await manualPull(); setCloudNewer(''); }} className="px-3 py-1 rounded-lg bg-zinc-900 text-white font-bold">Забрать из облака</button>
+        </div>
+      )}
       <header className="sticky top-0 z-30 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
         <div className="max-w-[1480px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div>
