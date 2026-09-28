@@ -57,7 +57,7 @@ export default function Admin() {
       setCloud({ s: 'ok', at });
     } catch (e) {
       const msg = String(e.message || e);
-      const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError/i.test(msg) ? ' — нет доступа к api.github.com с этой сети' : '';
+      const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError|Load failed/i.test(msg) ? ' — нет связи с api.github.com с этой сети: включи VPN в браузере или редактируй с другого компа' : '';
       setCloud({ s: 'err', msg: msg + hint });
     } finally {
       pushingRef.current = false;
@@ -137,7 +137,7 @@ export default function Admin() {
     } catch (e) {
       setToken('');
       setCloud({ s: 'no' });
-      setConnectMsg('✗ Токен не работает: ' + String(e.message || e) + ' — скопируй из файла «ПОДКЛЮЧЕНИЕ-меню.txt» ДЛИННУЮ ССЫЛКУ целиком и вставь её сюда (можно прямо всю ссылку).');
+      setConnectMsg(netErrText(e));
     }
   }
 
@@ -149,8 +149,16 @@ export default function Admin() {
     } catch (e) {
       setToken('');
       setCloud({ s: 'no' });
-      setConnectMsg('✗ Токен не работает: ' + String(e.message || e) + ' — вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново.');
+      setConnectMsg(netErrText(e));
     }
+  }
+
+  function netErrText(e) {
+    const msg = String(e.message || e);
+    if (/Failed to fetch|NetworkError|Load failed|abort/i.test(msg)) {
+      return '✗ Нет связи с сервером GitHub (api.github.com) с этой сети — токен тут не при чём. Включи VPN в браузере (в Opera: меню → Настройки → VPN → включить) и нажми OK ещё раз. Либо редактируй меню с компьютера, где сохранение уже настроено.';
+    }
+    return '✗ Токен не работает: ' + msg + ' — скопируй из файла «ПОДКЛЮЧЕНИЕ-меню.txt» ДЛИННУЮ ССЫЛКУ целиком (от «https» до конца) и вставь её сюда.';
   }
 
   const screen = store.screens.find((s) => s.id === activeScreenId);
