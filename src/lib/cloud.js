@@ -82,6 +82,7 @@ async function gh(path, method = 'GET', body) {
 }
 
 // Публикует данные коммитом в gh-pages. Возвращает ISO-время публикации.
+// При гонке (кто-то другой тоже двигает ветку) — повторяем от свежей головы несколько раз.
 export async function pushCloud(data) {
   if (!hasToken()) throw new Error('NO_TOKEN');
   const updatedAt = new Date().toISOString();
@@ -90,7 +91,7 @@ export async function pushCloud(data) {
     encoding: 'base64',
   });
   let lastErr;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const ref = await gh(`/git/ref/heads/${BRANCH}`);
       const commit = await gh(`/git/commits/${ref.object.sha}`);
@@ -107,8 +108,9 @@ export async function pushCloud(data) {
       return updatedAt;
     } catch (e) {
       lastErr = e;
-      // гонка при обновлении ref — повторяем сборку коммита от свежей головы
+      // гонка при обновлении ref — пауза и повтор от свежей головы
       if (!/409|422/.test(String(e.message))) throw e;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
     }
   }
   throw lastErr;

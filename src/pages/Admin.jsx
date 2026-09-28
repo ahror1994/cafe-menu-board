@@ -61,6 +61,7 @@ export default function Admin() {
     try {
       const at = await pushCloud(storeRef.current);
       setCloud({ s: 'ok', at });
+      setConnectMsg('');
     } catch (e) {
       const msg = String(e.message || e);
       const hint = /401|Bad credentials/i.test(msg) ? ' — токен не тот, вставь ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» заново' : /Failed to fetch|NetworkError|Load failed/i.test(msg) ? ' — нет связи с api.github.com с этой сети: включи VPN в браузере или редактируй с другого компа' : '';
