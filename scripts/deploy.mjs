@@ -2,6 +2,7 @@
 // gh-pages заменяет ветку целиком, поэтому data/menu.json нужно пронести через деплой.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 const LIVE = 'https://ahror1994.github.io/cafe-menu-board/data/menu.json';
 
@@ -12,17 +13,35 @@ function run(cmd, args) {
 
 run('npx', ['vite', 'build']);
 
+// --- пронести живые данные облака через деплой (gh-pages заменяется целиком) ---
+async function ghApi(path) {
+  const { execSync } = await import('node:child_process');
+  const out = execSync(`gh api "${path}"`, { maxBuffer: 64 * 1024 * 1024, encoding: 'utf8' });
+  return JSON.parse(out);
+}
+
 try {
+  // 1) данные меню
   const res = await fetch(`${LIVE}?t=${Date.now()}`);
   if (res.ok) {
     const txt = await res.text();
-    JSON.parse(txt); // проверка целостности
+    JSON.parse(txt);
     mkdirSync('dist/data', { recursive: true });
     writeFileSync('dist/data/menu.json', txt);
     console.log(`[deploy] живые данные облака сохранены в dist (${Math.round(txt.length / 1024)}KB)`);
   } else {
     console.log(`[deploy] в облаке ещё нет данных (${res.status}) — уйдёт seed из public/data`);
   }
+  // 2) папка с картинками data/img
+  const treeRes = await ghApi('repos/ahror1994/cafe-menu-board/git/trees/gh-pages?recursive=1');
+  const imgFiles = (treeRes.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith('data/img/'));
+  for (const t of imgFiles) {
+    const dest = 'dist/' + t.path;
+    mkdirSync(path.dirname(dest), { recursive: true });
+    const r = await fetch(`https://ahror1994.github.io/cafe-menu-board/${t.path}`);
+    if (r.ok) writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
+  }
+  if (imgFiles.length) console.log(`[deploy] картинки облака перенесены: ${imgFiles.length} шт.`);
 } catch (e) {
   console.warn('[deploy] не смог получить живые данные:', e.message);
 }
