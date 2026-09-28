@@ -49,6 +49,12 @@ export default function Admin() {
   }
 
   async function doPush() {
+    if (!hasToken()) {
+      setShowCloudPanel(true);
+      setCloud({ s: 'no' });
+      setConnectMsg('Сначала подключи облако: вставь в поле ниже длинную ссылку из файла «ПОДКЛЮЧЕНИЕ-меню.txt» (или токен) и нажми OK.');
+      return;
+    }
     if (pushingRef.current) { pendingRef.current = true; return; }
     pushingRef.current = true;
     setCloud({ s: 'push' });
