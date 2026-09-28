@@ -162,8 +162,8 @@ export default function Admin() {
 
   function netErrText(e) {
     const msg = String(e.message || e);
-    if (/Failed to fetch|NetworkError|Load failed|abort/i.test(msg)) {
-      return '✗ Нет связи с сервером GitHub (api.github.com) с этой сети — токен тут не при чём. Включи VPN в браузере (в Opera: меню → Настройки → VPN → включить) и нажми OK ещё раз. Либо редактируй меню с компьютера, где сохранение уже настроено.';
+    if (/Failed to fetch|NetworkError|Load failed|abort|unstable/i.test(msg)) {
+      return '✗ Связь с GitHub оборвалась — сеть нестабильная. Нажми OK ещё раз: я уже добавил автоповторы, часто проходит со 2-й попытки. Если не проходит совсем — проверь интернет на этом компе (открывается ли https://api.github.com/zen) или подключи его к точке доступа телефона.';
     }
     return '✗ Токен не работает: ' + msg + ' — скопируй из файла «ПОДКЛЮЧЕНИЕ-меню.txt» ДЛИННУЮ ССЫЛКУ целиком (от «https» до конца) и вставь её сюда.';
   }
